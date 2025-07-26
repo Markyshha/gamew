@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Рабочий платформер</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #87CEEB;
+            touch-action: none;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 10px;
+            box-sizing: border-box;
+        }
+        .btn {
+            width: 80px;
+            height: 80px;
+            background-color: rgba(0,0,0,0.3);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            color: white;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #score {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="score">0</div>
+    <div id="controls">
+        <div class="btn" id="leftBtn">←</div>
+        <div class="btn" id="rightBtn">→</div>
+        <div class="btn" id="jumpBtn">↑</div>
+    </div>
+
+    <script>
+        // Настройка canvas
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Игровые переменные
+        let score = 0;
+        let gameRunning = true;
+        
+        // Игрок
+        const player = {
+            x: 100,
+            y: canvas.height - 150,
+            width: 40,
+            height: 60,
+            speed: 5,
+            velX: 0,
+            velY: 0,
+            isJumping: false,
+            color: '#FF5733',
+            
+            update: function() {
+                // Гравитация
+                this.velY += 0.5;
+                
+                // Движение
+                this.x += this.velX;
+                this.y += this.velY;
+                
+                // Границы экрана
+                if (this.x < 0) this.x = 0;
+                if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
+                
+                // Земля
+                if (this.y > canvas.height - 50 - this.height) {
+                    this.y = canvas.height - 50 - this.height;
+                    this.velY = 0;
+                    this.isJumping = false;
+                }
+            },
+            
+            draw: function() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Глаза
+                ctx.fillStyle = 'white';
+                ctx.fillRect(this.x + 10, this.y + 15, 8, 8);
+                ctx.fillRect(this.x + 22, this.y + 15, 8, 8);
+            },
+            
+            jump: function() {
+                if (!this.isJumping) {
+                    this.velY = -12;
+                    this.isJumping = true;
+                }
+            }
+        };
+        
+        // Платформы
+        let platforms = [
+            {x: 0, y: canvas.height - 50, width: canvas.width, height: 50, color: '#27AE60'},
+            {x: 100, y: canvas.height - 150, width: 100, height: 20, color: '#2ECC71'},
+            {x: 300, y: canvas.height - 250, width: 100, height: 20, color: '#2ECC71'},
+            {x: 50, y: canvas.height - 350, width: 100, height: 20, color: '#2ECC71'},
+            {x: 250, y: canvas.height - 450, width: 100, height: 20, color: '#2ECC71'}
+        ];
+        
+        // Монеты
+        let coins = [];
+        for (let i = 0; i < 10; i++) {
+            coins.push({
+                x: Math.random() * (canvas.width - 30),
+                y: Math.random() * (canvas.height - 200),
+                radius: 10,
+                collected: false
+            });
+        }
+        
+        // Враги
+        let enemies = [
+            {x: 200, y: canvas.height - 100, width: 40, height: 40, speed: 2, dir: 1},
+            {x: 400, y: canvas.height - 300, width: 40, height: 40, speed: 3, dir: -1}
+        ];
+        
+        // Управление (исправленное)
+        const leftBtn = document.getElementById('leftBtn');
+        const rightBtn = document.getElementById('rightBtn');
+        const jumpBtn = document.getElementById('jumpBtn');
+        
+        // Обработчики для сенсорного управления
+        leftBtn.addEventListener('touchstart', handleLeftStart, {passive: false});
+        leftBtn.addEventListener('touchend', handleLeftEnd, {passive: false});
+        rightBtn.addEventListener('touchstart', handleRightStart, {passive: false});
+        rightBtn.addEventListener('touchend', handleRightEnd, {passive: false});
+        jumpBtn.addEventListener('touchstart', handleJump, {passive: false});
+        
+        // Обработчики для кнопок
+        leftBtn.addEventListener('mousedown', handleLeftStart);
+        leftBtn.addEventListener('mouseup', handleLeftEnd);
+        leftBtn.addEventListener('mouseleave', handleLeftEnd);
+        rightBtn.addEventListener('mousedown', handleRightStart);
+        rightBtn.addEventListener('mouseup', handleRightEnd);
+        rightBtn.addEventListener('mouseleave', handleRightEnd);
+        jumpBtn.addEventListener('mousedown', handleJump);
+        
+        function handleLeftStart(e) {
+            e.preventDefault();
+            player.velX = -player.speed;
+        }
+        
+        function handleLeftEnd(e) {
+            e.preventDefault();
+            if (player.velX < 0) player.velX = 0;
+        }
+        
+        function handleRightStart(e) {
+            e.preventDefault();
+            player.velX = player.speed;
+        }
+        
+        function handleRightEnd(e) {
+            e.preventDefault();
+            if (player.velX > 0) player.velX = 0;
+        }
+        
+        function handleJump(e) {
+            e.preventDefault();
+            player.jump();
+        }
+        
+        // Игровой цикл
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            // Очистка
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Обновление игрока
+            player.update();
+            
+            // Рисуем платформы и проверяем коллизии
+            platforms.forEach(plat => {
+                ctx.fillStyle = plat.color;
+                ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+                
+                if (player.x + player.width > plat.x && 
+                    player.x < plat.x + plat.width &&
+                    player.y + player.height > plat.y && 
+                    player.y < plat.y + plat.height) {
+                    
+                    player.y = plat.y - player.height;
+                    player.velY = 0;
+                    player.isJumping = false;
+                }
+            });
+            
+            // Рисуем и собираем монеты
+            coins.forEach(coin => {
+                if (!coin.collected) {
+                    ctx.fillStyle = '#F1C40F';
+                    ctx.beginPath();
+                    ctx.arc(coin.x, coin.y, coin.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    if (Math.abs(player.x + player.width/2 - coin.x) < 20 && 
+                        Math.abs(player.y + player.height/2 - coin.y) < 20) {
+                        coin.collected = true;
+                        score += 10;
+                        document.getElementById('score').textContent = score;
+                    }
+                }
+            });
+            
+            // Обновляем и рисуем врагов
+            enemies.forEach(enemy => {
+                enemy.x += enemy.speed * enemy.dir;
+                if (enemy.x < 0 || enemy.x > canvas.width - enemy.width) {
+                    enemy.dir *= -1;
+                }
+                
+                ctx.fillStyle = '#E74C3C';
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                
+                if (player.x + player.width > enemy.x && 
+                    player.x < enemy.x + enemy.width &&
+                    player.y + player.height > enemy.y && 
+                    player.y < enemy.y + enemy.height) {
+                    
+                    gameRunning = false;
+                    alert('Игра окончена! Ваш счет: ' + score);
+                    document.location.reload();
+                }
+            });
+            
+            // Рисуем игрока
+            player.draw();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        gameLoop();
+    </script>
+</body>
+</html>
