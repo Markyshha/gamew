@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Шарики с анимациями</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 10px;
+            background: #111;
+            font-family: Arial;
+            text-align: center;
+            color: white;
+            touch-action: manipulation;
+            overflow: hidden;
+        }
+        h1 {
+            color: #FFD700;
+            text-shadow: 0 0 5px rgba(255,215,0,0.5);
+        }
+        #game {
+            margin: 0 auto;
+            width: 320px;
+            height: 320px;
+            position: relative;
+            background: #222;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .cell {
+            width: 40px;
+            height: 40px;
+            float: left;
+            box-sizing: border-box;
+            position: relative;
+        }
+        .ball {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            margin: 2px;
+            position: absolute;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .selected {
+            box-shadow: 0 0 10px 3px #FFD700;
+            transform: scale(1.1);
+            z-index: 10;
+        }
+        .explode {
+            animation: explode 0.5s forwards;
+        }
+        @keyframes explode {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.5); opacity: 0.7; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        .fall {
+            transition: all 0.3s cubic-bezier(0.5, 0, 0.5, 1);
+        }
+        #score {
+            font-size: 24px;
+            padding: 10px;
+            color: #4CAF50;
+        }
+        #restart {
+            padding: 12px 25px;
+            font-size: 18px;
+            background: linear-gradient(to bottom, #4CAF50, #2E8B57);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            margin-top: 15px;
+            box-shadow: 0 3px 5px rgba(0,0,0,0.2);
+        }
+        #restart:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <h1>Шарики</h1>
+    <div id="score">Очки: 0</div>
+    <div id="game"></div>
+    <button id="restart">Новая игра</button>
+
+    <script>
+        // Настройки игры
+        var size = 8;
+        var colors = ['#FF5252', '#FFD700', '#4CAF50', '#2196F3', '#9C27B0'];
+        var score = 0;
+        var selected = null;
+        var board = [];
+        var animating = false;
+        
+        // Инициализация игры
+        function initGame() {
+            score = 0;
+            updateScore();
+            createBoard();
+            fillBoard();
+        }
+        
+        // Создание игрового поля
+        function createBoard() {
+            var game = document.getElementById('game');
+            game.innerHTML = '';
+            board = [];
+            
+            for (var y = 0; y < size; y++) {
+                board[y] = [];
+                for (var x = 0; x < size; x++) {
+                    var cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    
+                    cell.onclick = function() {
+                        if (animating) return;
+                        handleClick(parseInt(this.dataset.x), parseInt(this.dataset.y));
+                    };
+                    
+                    game.appendChild(cell);
+                    board[y][x] = {cell: cell, ball: null};
+                }
+            }
+        }
+        
+        // Заполнение поля шариками
+        function fillBoard() {
+            do {
+                for (var y = 0; y < size; y++) {
+                    for (var x = 0; x < size; x++) {
+                        if (!board[y][x].ball) {
+                            createBall(x, y);
+                        }
+                    }
+                }
+            } while (findMatches(true));
+        }
+        
+        // Создание шарика
+        function createBall(x, y) {
+            var ball = document.createElement('div');
+            ball.className = 'ball';
+            ball.style.background = colors[Math.floor(Math.random() * colors.length)];
+            board[y][x].cell.appendChild(ball);
+            board[y][x].ball = ball;
+        }
+        
+        // Обработка клика
+        function handleClick(x, y) {
+            if (!selected) {
+                // Выбор первого шарика
+                selected = {x: x, y: y};
+                board[y][x].ball.classList.add('selected');
+            } else {
+                // Проверка соседних шариков
+                var dx = Math.abs(x - selected.x);
+                var dy = Math.abs(y - selected.y);
+                
+                if ((dx === 1 && dy === 0) || (dy === 1 && dx === 0)) {
+                    // Снимаем выделение
+                    board[selected.y][selected.x].ball.classList.remove('selected');
+                    
+                    // Меняем шарики местами
+                    swapBalls(selected.x, selected.y, x, y, function() {
+                        // Проверяем совпадения после обмена
+                        if (!findMatches()) {
+                            // Если нет совпадений - возвращаем обратно
+                            swapBalls(x, y, selected.x, selected.y);
+                        }
+                    });
+                } else {
+                    // Снимаем выделение
+                    board[selected.y][selected.x].ball.classList.remove('selected');
+                }
+                selected = null;
+            }
+        }
+        
+        // Обмен шариков с анимацией
+        function swapBalls(x1, y1, x2, y2, callback) {
+            animating = true;
+            
+            var ball1 = board[y1][x1].ball;
+            var ball2 = board[y2][x2].ball;
+            
+            // Сохраняем цвета
+            var color1 = ball1.style.background;
+            var color2 = ball2.style.background;
+            
+            // Анимация перемещения
+            ball1.style.zIndex = '10';
+            ball2.style.zIndex = '10';
+            
+            var tempX = ball1.style.left;
+            var tempY = ball1.style.top;
+            
+            ball1.style.left = (x2 - x1) * 40 + 'px';
+            ball1.style.top = (y2 - y1) * 40 + 'px';
+            
+            ball2.style.left = (x1 - x2) * 40 + 'px';
+            ball2.style.top = (y1 - y2) * 40 + 'px';
+            
+            setTimeout(function() {
+                // Возвращаем в исходное положение
+                ball1.style.left = '0';
+                ball1.style.top = '0';
+                ball2.style.left = '0';
+                ball2.style.top = '0';
+                
+                // Меняем цвета
+                ball1.style.background = color2;
+                ball2.style.background = color1;
+                
+                // Обновляем z-index
+                ball1.style.zIndex = '';
+                ball2.style.zIndex = '';
+                
+                // Обновляем модель данных
+                board[y1][x1].ball = ball2;
+                board[y2][x2].ball = ball1;
+                
+                animating = false;
+                if (callback) callback();
+            }, 300);
+        }
+        
+        // Поиск совпадений
+        function findMatches(silent) {
+            var matches = [];
+            
+            // Проверяем горизонтальные линии
+            for (var y = 0; y < size; y++) {
+                for (var x = 0; x < size - 2; x++) {
+                    var color = board[y][x].ball.style.background;
+                    if (board[y][x+1].ball.style.background === color && 
+                        board[y][x+2].ball.style.background === color) {
+                        
+                        var match = [{x: x, y: y}, {x: x+1, y: y}, {x: x+2, y: y}];
+                        
+                        // Проверяем продолжение линии
+                        for (var i = x+3; i < size; i++) {
+                            if (board[y][i].ball.style.background === color) {
+                                match.push({x: i, y: y});
+                            } else {
+                                break;
+                            }
+                        }
+                        
+                        matches.push(match);
+                    }
+                }
+            }
+            
+            // Проверяем вертикальные линии
+            for (var x = 0; x < size; x++) {
+                for (var y = 0; y < size - 2; y++) {
+                    var color = board[y][x].ball.style.background;
+                    if (board[y+1][x].ball.style.background === color && 
+                        board[y+2][x].ball.style.background === color) {
+                        
+                        var match = [{x: x, y: y}, {x: x, y: y+1}, {x: x, y: y+2}];
+                        
+                        // Проверяем продолжение линии
+                        for (var i = y+3; i < size; i++) {
+                            if (board[i][x].ball.style.background === color) {
+                                match.push({x: x, y: i});
+                            } else {
+                                break;
+                            }
+                        }
+                        
+                        matches.push(match);
+                    }
+                }
+            }
+            
+            if (matches.length > 0 && !silent) {
+                processMatches(matches);
+                return true;
+            }
+            
+            return matches.length > 0;
+        }
+        
+        // Обработка совпадений
+        function processMatches(matches) {
+            animating = true;
+            var uniqueMatches = [];
+            var scoreToAdd = 0;
+            
+            // Убираем дубликаты
+            matches.forEach(function(match) {
+                match.forEach(function(pos) {
+                    var exists = uniqueMatches.some(function(p) {
+                        return p.x === pos.x && p.y === pos.y;
+                    });
+                    if (!exists) {
+                        uniqueMatches.push(pos);
+                        scoreToAdd += 10;
+                    }
+                });
+            });
+            
+            // Анимация исчезновения
+            uniqueMatches.forEach(function(pos) {
+                board[pos.y][pos.x].ball.classList.add('explode');
+            });
+            
+            // Обновляем счет
+            score += scoreToAdd;
+            updateScore();
+            
+            // Удаляем шарики после анимации
+            setTimeout(function() {
+                uniqueMatches.forEach(function(pos) {
+                    board[pos.y][pos.x].cell.removeChild(board[pos.y][pos.x].ball);
+                    board[pos.y][pos.x].ball = null;
+                });
+                
+                // Заполняем пустые места
+                fillEmptySpaces();
+            }, 500);
+        }
+        
+        // Заполнение пустых мест
+        function fillEmptySpaces() {
+            // Падение шариков вниз
+            for (var x = 0; x < size; x++) {
+                var emptyY = size - 1;
+                
+                for (var y = size - 1; y >= 0; y--) {
+                    if (board[y][x].ball) {
+                        if (y !== emptyY) {
+                            // Анимация падения
+                            board[y][x].ball.classList.add('fall');
+                            board[y][x].ball.style.top = (emptyY - y) * 40 + 'px';
+                            
+                            setTimeout(function(x, y, emptyY) {
+                                board[emptyY][x].cell.appendChild(board[y][x].ball);
+                                board[emptyY][x].ball = board[y][x].ball;
+                                board[y][x].ball = null;
+                                
+                                board[emptyY][x].ball.classList.remove('fall');
+                                board[emptyY][x].ball.style.top = '0';
+                            }, 300, x, y, emptyY);
+                        }
+                        emptyY--;
+                    }
+                }
+            }
+            
+            // Создаем новые шарики сверху
+            setTimeout(function() {
+                for (var x = 0; x < size; x++) {
+                    for (var y = 0; y < size; y++) {
+                        if (!board[y][x].ball) {
+                            createBall(x, y);
+                            board[y][x].ball.style.top = '-40px';
+                            board[y][x].ball.classList.add('fall');
+                            
+                            setTimeout(function(x, y) {
+                                board[y][x].ball.style.top = '0';
+                                board[y][x].ball.classList.remove('fall');
+                            }, 50, x, y);
+                        }
+                    }
+                }
+                
+                // Проверяем новые совпадения
+                setTimeout(function() {
+                    if (findMatches()) {
+                        processMatches();
+                    } else {
+                        animating = false;
+                    }
+                }, 500);
+            }, 350);
+        }
+        
+        // Обновление счета
+        function updateScore() {
+            document.getElementById('score').textContent = 'Очки: ' + score;
+        }
+        
+        // Новая игра
+        document.getElementById('restart').onclick = initGame;
+        
+        // Запуск игры
+        initGame();
+    </script>
+</body>
+</html>
