@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Шарики (рабочая версия для Lumia 640 LTE)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+            -ms-touch-action: manipulation;
+            touch-action: manipulation;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        .game-container {
+            width: 100%;
+            max-width: 240px;
+            margin: 10px auto;
+            background: white;
+            padding: 5px;
+            box-sizing: border-box;
+            border-radius: 5px;
+            box-shadow: 0 0 3px rgba(0,0,0,0.2);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        .game-board {
+            width: 100%;
+            height: 360px;
+            background: #ddd;
+            position: relative;
+            overflow: hidden;
+        }
+        .ball {
+            width: 40px;
+            height: 40px;
+            border-radius: 20px;
+            position: absolute;
+            transition: all 0.3s ease-out;
+            -webkit-transition: all 0.3s ease-out;
+            -ms-transition: all 0.3s ease-out;
+            box-sizing: border-box;
+        }
+        .ball.selected {
+            box-shadow: 0 0 0 3px gold;
+            -webkit-box-shadow: 0 0 0 3px gold;
+        }
+        button {
+            margin-top: 5px;
+            padding: 5px 8px;
+            font-size: 12px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <div>Шарики</div>
+            <div>Очки: <span id="score">0</span></div>
+        </div>
+        <div class="game-board" id="gameBoard"></div>
+        <button id="newGameBtn">Новая игра</button>
+    </div>
+
+    <script>
+        // Проверка на старые браузеры
+        if (!Array.prototype.forEach) {
+            Array.prototype.forEach = function(callback) {
+                for (var i = 0; i < this.length; i++) {
+                    callback(this[i], i, this);
+                }
+            };
+        }
+
+        var colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00', '#800080']; // Яркие цвета
+        var boardSize = { rows: 8, cols: 5 };
+        var ballSize = 40;
+        var spacing = 44;
+        var board = [];
+        var selected = null;
+        var score = 0;
+
+        function init() {
+            score = 0;
+            document.getElementById('score').textContent = score;
+            createBoard();
+            render();
+        }
+
+        function createBoard() {
+            board = [];
+            for (var r = 0; r < boardSize.rows; r++) {
+                board[r] = [];
+                for (var c = 0; c < boardSize.cols; c++) {
+                    board[r][c] = {
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        id: 'ball-' + r + '-' + c
+                    };
+                }
+            }
+        }
+
+        function render() {
+            var gameBoard = document.getElementById('gameBoard');
+            gameBoard.innerHTML = '';
+            
+            for (var r = 0; r < boardSize.rows; r++) {
+                for (var c = 0; c < boardSize.cols; c++) {
+                    if (!board[r][c]) continue;
+                    
+                    var ball = document.createElement('div');
+                    ball.className = 'ball';
+                    ball.id = board[r][c].id;
+                    ball.style.backgroundColor = board[r][c].color;
+                    ball.style.left = (c * spacing) + 'px';
+                    ball.style.top = (r * spacing) + 'px';
+                    
+                    (function(row, col) {
+                        ball.addEventListener('click', function() { 
+                            handleClick(row, col); 
+                        });
+                    })(r, c);
+                    
+                    gameBoard.appendChild(ball);
+                }
+            }
+        }
+
+        function handleClick(r, c) {
+            var ball = document.getElementById(board[r][c].id);
+            if (!ball) return;
+
+            if (!selected) {
+                // Снимаем выделение с предыдущего шара, если есть
+                if (selected) {
+                    var prevBall = document.getElementById(board[selected.r][selected.c].id);
+                    if (prevBall) prevBall.classList.remove('selected');
+                }
+                selected = { r: r, c: c };
+                ball.classList.add('selected');
+            } else {
+                var first = selected;
+                var second = { r: r, c: c };
+
+                if (isAdjacent(first, second)) {
+                    document.getElementById(board[first.r][first.c].id).classList.remove('selected');
+                    
+                    // Меняем шарики местами с анимацией
+                    swapBalls(first, second, function() {
+                        // Обмен значениями
+                        var temp = board[first.r][first.c];
+                        board[first.r][first.c] = board[second.r][second.c];
+                        board[second.r][second.c] = temp;
+                        
+                        // Обновляем ID
+                        board[first.r][first.c].id = 'ball-' + first.r + '-' + first.c;
+                        board[second.r][second.c].id = 'ball-' + second.r + '-' + second.c;
+
+                        // Проверяем совпадения после перемещения
+                        setTimeout(function() {
+                            checkMatches();
+                        }, 100);
+                    });
+                } else {
+                    // Если шары не рядом, просто снимаем выделение
+                    document.getElementById(board[first.r][first.c].id).classList.remove('selected');
+                    selected = { r: r, c: c };
+                    ball.classList.add('selected');
+                    return;
+                }
+                selected = null;
+            }
+        }
+
+        function swapBalls(b1, b2, callback) {
+            var el1 = document.getElementById(board[b1.r][b1.c].id);
+            var el2 = document.getElementById(board[b2.r][b2.c].id);
+            
+            if (!el1 || !el2) return;
+            
+            // Анимация перемещения
+            el1.style.left = (b2.c * spacing) + 'px';
+            el1.style.top = (b2.r * spacing) + 'px';
+            el2.style.left = (b1.c * spacing) + 'px';
+            el2.style.top = (b1.r * spacing) + 'px';
+
+            setTimeout(callback, 300);
+        }
+
+        function isAdjacent(b1, b2) {
+            return (Math.abs(b1.r - b2.r) === 1 && b1.c === b2.c) || 
+                   (Math.abs(b1.c - b2.c) === 1 && b1.r === b2.r);
+        }
+
+        function checkMatches() {
+            var matches = findMatches();
+            if (matches.length > 0) {
+                processMatches(matches);
+            } else {
+                render();
+            }
+        }
+
+        function findMatches() {
+            var matches = [];
+            var matched = {};
+
+            var directions = [
+                {dr: 1, dc: 0}, // вертикаль
+                {dr: 0, dc: 1}  // горизонталь
+            ];
+
+            directions.forEach(function(dir) {
+                for (var r = 0; r < boardSize.rows; r++) {
+                    for (var c = 0; c < boardSize.cols; c++) {
+                        if (!board[r][c]) continue;
+                        
+                        var color = board[r][c].color;
+                        var currentMatches = [{r: r, c: c}];
+                        
+                        var nr = r + dir.dr;
+                        var nc = c + dir.dc;
+                        while (nr >= 0 && nr < boardSize.rows && nc >= 0 && nc < boardSize.cols && 
+                               board[nr][nc] && board[nr][nc].color === color) {
+                            currentMatches.push({r: nr, c: nc});
+                            nr += dir.dr;
+                            nc += dir.dc;
+                        }
+                        
+                        if (currentMatches.length >= 3) {
+                            currentMatches.forEach(function(m) {
+                                var key = m.r + ',' + m.c;
+                                if (!matched[key]) {
+                                    matches.push(m);
+                                    matched[key] = true;
+                                }
+                            });
+                        }
+                    }
+                }
+            });
+
+            return matches;
+        }
+
+        function processMatches(matches) {
+            score += matches.length * 10;
+            document.getElementById('score').textContent = score;
+
+            // Удаляем совпавшие шарики
+            matches.forEach(function(m) {
+                var ball = document.getElementById(board[m.r][m.c].id);
+                if (ball) {
+                    ball.style.opacity = '0';
+                    ball.style.transition = 'opacity 0.3s';
+                }
+            });
+
+            setTimeout(function() {
+                // Удаляем из массива
+                matches.forEach(function(m) {
+                    board[m.r][m.c] = null;
+                });
+
+                // Сдвигаем шарики вниз
+                for (var c = 0; c < boardSize.cols; c++) {
+                    var empty = boardSize.rows - 1;
+                    for (var r = boardSize.rows - 1; r >= 0; r--) {
+                        if (board[r][c]) {
+                            board[empty][c] = board[r][c];
+                            board[empty][c].id = 'ball-' + empty + '-' + c;
+                            if (empty !== r) board[r][c] = null;
+                            empty--;
+                        }
+                    }
+                    // Заполняем верхние пустые ячейки
+                    for (var r = empty; r >= 0; r--) {
+                        board[r][c] = {
+                            color: colors[Math.floor(Math.random() * colors.length)],
+                            id: 'ball-' + r + '-' + c
+                        };
+                    }
+                }
+
+                render();
+
+                // Проверяем новые совпадения
+                setTimeout(function() {
+                    var newMatches = findMatches();
+                    if (newMatches.length > 0) {
+                        processMatches(newMatches);
+                    }
+                }, 300);
+            }, 300);
+        }
+
+        document.getElementById('newGameBtn').addEventListener('click', init);
+        init();
+    </script>
+</body>
+</html>
