@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Шарики (упрощенная версия)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 5px;
+            background: #f0f0f0;
+            font-family: Arial;
+            touch-action: manipulation;
+            user-select: none;
+        }
+        .game-container {
+            width: 220px;
+            margin: 0 auto;
+            background: white;
+            padding: 5px;
+            border-radius: 5px;
+            box-shadow: 0 0 3px rgba(0,0,0,0.2);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        .game-board {
+            width: 220px;
+            height: 352px;
+            background: #ddd;
+            position: relative;
+            overflow: hidden;
+        }
+        .ball {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            position: absolute;
+            transition: all 0.15s linear;
+        }
+        .ball.selected {
+            box-shadow: 0 0 5px gold;
+        }
+        button {
+            margin-top: 5px;
+            padding: 3px 8px;
+            font-size: 11px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <div>Шарики</div>
+            <div>Очки: <span id="score">0</span></div>
+        </div>
+        <div class="game-board" id="gameBoard"></div>
+        <button id="newGameBtn">Новая игра</button>
+    </div>
+
+    <script>
+        const colors = ['red', 'blue', 'green', 'yellow', 'purple'];
+        const boardSize = { rows: 8, cols: 5 };
+        const ballSize = 40;
+        const spacing = 44;
+        let board = [];
+        let selected = null;
+        let score = 0;
+
+        function init() {
+            score = 0;
+            document.getElementById('score').textContent = score;
+            createBoard();
+            render();
+        }
+
+        function createBoard() {
+            board = [];
+            for (let r = 0; r < boardSize.rows; r++) {
+                board[r] = [];
+                for (let c = 0; c < boardSize.cols; c++) {
+                    board[r][c] = {
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        id: `ball-${r}-${c}`
+                    };
+                }
+            }
+        }
+
+        function render() {
+            const gameBoard = document.getElementById('gameBoard');
+            gameBoard.innerHTML = '';
+            
+            for (let r = 0; r < boardSize.rows; r++) {
+                for (let c = 0; c < boardSize.cols; c++) {
+                    if (!board[r][c]) continue;
+                    
+                    const ball = document.createElement('div');
+                    ball.className = 'ball';
+                    ball.id = board[r][c].id;
+                    ball.style.background = board[r][c].color;
+                    ball.style.left = (c * spacing) + 'px';
+                    ball.style.top = (r * spacing) + 'px';
+                    
+                    ball.addEventListener('click', () => handleClick(r, c));
+                    gameBoard.appendChild(ball);
+                }
+            }
+        }
+
+        function handleClick(r, c) {
+            const ball = document.getElementById(board[r][c].id);
+            if (!ball) return;
+
+            if (!selected) {
+                selected = { r, c };
+                ball.classList.add('selected');
+            } else {
+                const first = selected;
+                const second = { r, c };
+
+                if (isAdjacent(first, second)) {
+                    document.getElementById(board[first.r][first.c].id).classList.remove('selected');
+                    
+                    // Меняем шарики местами ВСЕГДА
+                    swapBalls(first, second, () => {
+                        [board[first.r][first.c], board[second.r][second.c]] = 
+                        [board[second.r][second.c], board[first.r][first.c]];
+                        
+                        board[first.r][first.c].id = `ball-${first.r}-${first.c}`;
+                        board[second.r][second.c].id = `ball-${second.r}-${second.c}`;
+
+                        // Проверяем совпадения только после перемещения
+                        checkMatches();
+                    });
+                } else {
+                    document.getElementById(board[first.r][first.c].id).classList.remove('selected');
+                }
+                selected = null;
+            }
+        }
+
+        function swapBalls(b1, b2, callback) {
+            const el1 = document.getElementById(board[b1.r][b1.c].id);
+            const el2 = document.getElementById(board[b2.r][b2.c].id);
+            
+            el1.style.left = (b2.c * spacing) + 'px';
+            el1.style.top = (b2.r * spacing) + 'px';
+            el2.style.left = (b1.c * spacing) + 'px';
+            el2.style.top = (b1.r * spacing) + 'px';
+
+            setTimeout(callback, 150);
+        }
+
+        function isAdjacent(b1, b2) {
+            return (Math.abs(b1.r - b2.r) === 1 && b1.c === b2.c) || 
+                   (Math.abs(b1.c - b2.c) === 1 && b1.r === b2.r);
+        }
+
+        function checkMatches() {
+            const matches = findMatches();
+            if (matches.length > 0) {
+                processMatches(matches);
+            } else {
+                // Если совпадений нет - просто продолжаем игру
+                render();
+            }
+        }
+
+        function findMatches() {
+            const matches = [];
+            const matched = {};
+
+            // Проверка по вертикали и горизонтали
+            const directions = [
+                {dr: 1, dc: 0}, // вертикаль
+                {dr: 0, dc: 1}  // горизонталь
+            ];
+
+            directions.forEach(dir => {
+                for (let r = 0; r < boardSize.rows; r++) {
+                    for (let c = 0; c < boardSize.cols; c++) {
+                        if (!board[r][c]) continue;
+                        
+                        const color = board[r][c].color;
+                        let currentMatches = [{r, c}];
+                        
+                        let nr = r + dir.dr;
+                        let nc = c + dir.dc;
+                        while (nr >= 0 && nr < boardSize.rows && nc >= 0 && nc < boardSize.cols && 
+                               board[nr][nc] && board[nr][nc].color === color) {
+                            currentMatches.push({r: nr, c: nc});
+                            nr += dir.dr;
+                            nc += dir.dc;
+                        }
+                        
+                        if (currentMatches.length >= 4) {
+                            currentMatches.forEach(m => {
+                                const key = `${m.r},${m.c}`;
+                                if (!matched[key]) {
+                                    matches.push(m);
+                                    matched[key] = true;
+                                }
+                            });
+                        }
+                    }
+                }
+            });
+
+            return matches;
+        }
+
+        function processMatches(matches) {
+            score += matches.length * 10;
+            document.getElementById('score').textContent = score;
+
+            // Удаляем совпавшие шарики
+            matches.forEach(m => {
+                board[m.r][m.c] = null;
+            });
+
+            // Сдвигаем шарики вниз
+            for (let c = 0; c < boardSize.cols; c++) {
+                let empty = boardSize.rows - 1;
+                for (let r = boardSize.rows - 1; r >= 0; r--) {
+                    if (board[r][c]) {
+                        board[empty][c] = board[r][c];
+                        board[empty][c].id = `ball-${empty}-${c}`;
+                        if (empty !== r) board[r][c] = null;
+                        empty--;
+                    }
+                }
+                // Заполняем верхние пустые ячейки
+                for (let r = empty; r >= 0; r--) {
+                    board[r][c] = {
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        id: `ball-${r}-${c}`
+                    };
+                }
+            }
+
+            // Перерисовываем и проверяем новые совпадения
+            render();
+            setTimeout(() => {
+                const newMatches = findMatches();
+                if (newMatches.length) {
+                    processMatches(newMatches);
+                }
+            }, 300);
+        }
+
+        document.getElementById('newGameBtn').addEventListener('click', init);
+        init();
+    </script>
+</body>
+</html>
